@@ -68,6 +68,19 @@ const GAME_SETTINGS: GameSettings = GameSettings {
 };
 
 
+enum BallState {
+    STUCK,
+    RISING,
+    FALLING,
+}
+
+struct BallInformation {
+    state: BallState,
+    x: f32,
+    y: f32,
+}
+
+
 fn pill_x_index_offset() -> f32 {
     let taken_space = GAME_SETTINGS.pill_column_length as f32 * (GAME_SETTINGS.pill_width + GAME_SETTINGS.pill_offset);
     return (GAME_WINDOW.width as f32 - taken_space) / 2.0;
@@ -97,6 +110,7 @@ fn main() {
         y: 0.0,
         variant: PillVariant::PINK,
     };
+
     let mut pills: [[BreakablePill; GAME_SETTINGS.pill_column_length]; 6] = [[default_pill; GAME_SETTINGS.pill_column_length]; 6];
 
     for (row_idx, row) in pills.iter_mut().enumerate() {
@@ -106,6 +120,12 @@ fn main() {
             pill.variant = GAME_SETTINGS.pill_default_rows[row_idx];
         }
     }
+
+    let mut ball_information = BallInformation {
+        state: BallState::STUCK,
+        x: 0.0,
+        y: 0.0,
+    };
 
     while !game.window_should_close() {
         if game.is_key_down(KeyboardKey::KEY_RIGHT) {
@@ -121,6 +141,15 @@ fn main() {
                 player.x = 0.0;
             }
         }
+            match ball_information.state {
+                BallState::STUCK => {
+                    ball_information.x = player.x + (player.width / 2.0);
+                    ball_information.y = player.y - 6.0;
+                },
+                BallState::RISING => todo!("Handle ball rising in fixed direction up until collision with top of view or a pill"),
+                BallState::FALLING => todo!("Handle ball falling in fixed direction down until collision with bottom, or paddle, or pill"),
+            }
+
 
         let mut drawer = game.begin_drawing(&thread);
         {
@@ -141,6 +170,12 @@ fn main() {
                     }
                 }
 
+                drawer.draw_circle(
+                    ball_information.x as i32,
+                    ball_information.y as i32,
+                    6.0,
+                    Color::TURQUOISE
+                );
             }
         }
     }
