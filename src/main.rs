@@ -170,9 +170,14 @@ fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: Vec<Rectan
         }
     }
 
-    if y_position == ball.y && x_position == ball.x {
-        x_position = if ball.x - last_position.x > 0.0 { x_position + GAME_SETTINGS.ball_velocity } else { x_position - GAME_SETTINGS.ball_velocity };
-        y_position = if ball.y - last_position.y >= 0.0 { y_position + GAME_SETTINGS.ball_velocity } else { y_position - GAME_SETTINGS.ball_velocity };
+    if !applied_vert {
+        y_position = if ball.y - last_position.y >= 0.0 { ball.y + GAME_SETTINGS.ball_velocity } else { ball.y - GAME_SETTINGS.ball_velocity };
+    }
+
+    if !applied_hor {
+        if (ball.x - last_position.x).abs() > 0.001 {
+            x_position = if ball.x - last_position.x > 0.0 { ball.x + GAME_SETTINGS.ball_velocity } else { ball.x - GAME_SETTINGS.ball_velocity };
+        }
     }
 
     return Vector2 { x: x_position, y: y_position  };
