@@ -1,5 +1,7 @@
 use raylib::prelude::*;
 
+mod physics;
+
 struct GameWindow {
     width: i32,
     height: i32,
@@ -36,12 +38,12 @@ impl PillVariant {
 
 }
 
-
 #[derive(Clone, Copy)]
 struct BreakablePill {
     x: f32,
     y: f32,
     variant: PillVariant,
+    alive: bool,
 }
 
 struct GameSettings {
@@ -53,8 +55,9 @@ struct GameSettings {
     pill_default_rows: [PillVariant; 6],
     pill_offset: f32,
     pill_column_length: usize,
+    ball_velocity: f32,
+    ball_radius: f32,
 }
-
 
 const GAME_SETTINGS: GameSettings = GameSettings {
     player_default_speed: 0.5,
@@ -65,25 +68,115 @@ const GAME_SETTINGS: GameSettings = GameSettings {
     pill_default_rows: [PillVariant::GREY, PillVariant::RED, PillVariant::YELLOW, PillVariant::BLUE, PillVariant::PINK, PillVariant::GREEN],
     pill_offset: 2.0,
     pill_column_length: 12,
+    ball_velocity: 1.0,
+    ball_radius: 6.0,
 };
 
 
 enum BallState {
-    STUCK,
-    RISING,
-    FALLING,
+    Stuck,
+    Free,
 }
 
 struct BallInformation {
     state: BallState,
-    x: f32,
-    y: f32,
+    position: Vector2,
+    last_position: Vector2,
 }
 
+enum CollisionSide {
+    None,
+    Top,
+    Left,
+    Right,
+    Bottom,
+}
 
 fn pill_x_index_offset() -> f32 {
     let taken_space = GAME_SETTINGS.pill_column_length as f32 * (GAME_SETTINGS.pill_width + GAME_SETTINGS.pill_offset);
     return (GAME_WINDOW.width as f32 - taken_space) / 2.0;
+}
+
+fn get_collision_side(obstacle: Rectangle, ball: Vector2, radius: f32) -> CollisionSide {
+    let closest_x = ball.x.clamp(obstacle.x, obstacle.x + obstacle.width);
+    let closest_y = ball.y.clamp(obstacle.y, obstacle.y + obstacle.height);
+
+    let distance_x = ball.x - closest_x;
+    let distance_y = ball.y - closest_y;
+
+    let distance_squared = (distance_x * distance_x) + (distance_y * distance_y);
+
+    if distance_squared > radius * radius {
+        return CollisionSide::None;
+    }
+
+    if distance_x == 0.0 && distance_y == 0.0 {
+        let left_dist = (ball.x - obstacle.x).abs();
+        let right_dist = (ball.x - (obstacle.x + obstacle.width)).abs();
+        let top_dist = (ball.y - obstacle.y).abs();
+        let bottom_dist = (ball.y - (obstacle.y + obstacle.height)).abs();
+
+        let min_dist = left_dist.min(right_dist).min(top_dist).min(bottom_dist);
+
+        if min_dist == left_dist { return CollisionSide::Left; }
+        if min_dist == right_dist { return CollisionSide::Right; }
+        if min_dist == top_dist { return CollisionSide::Top; }
+        return CollisionSide::Bottom;
+    }
+
+    if distance_x.abs() > distance_y.abs() {
+        if distance_x > 0.0 { CollisionSide::Right } else { CollisionSide::Left }
+    } else {
+        if distance_y > 0.0 { CollisionSide::Bottom } else { CollisionSide::Top }
+    }
+}
+
+fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: Vec<Rectangle>) -> Vector2 {
+    // TODO: Ball currently gets stuck inside the paddle
+    let mut x_position = ball.x;
+    let mut y_position = ball.y;
+
+    let mut applied_vert = false;
+    let mut applied_hor = false;
+
+    for collider in colliders {
+        let side = get_collision_side(collider, ball, GAME_SETTINGS.ball_radius);
+        match side {
+            CollisionSide::Top => {
+                if !applied_vert {
+                    y_position = y_position + GAME_SETTINGS.ball_velocity;
+                    applied_vert = true;
+                }
+            },
+            CollisionSide::Bottom => {
+                if !applied_vert {
+                    y_position = y_position - GAME_SETTINGS.ball_velocity;
+                    applied_vert = true;
+                }
+            },
+            CollisionSide::Left => {
+                if !applied_hor {
+                    x_position = x_position + GAME_SETTINGS.ball_velocity;
+                    applied_hor = true;
+                }
+            },
+            CollisionSide::Right => {
+                if !applied_hor {
+                    x_position = x_position - GAME_SETTINGS.ball_velocity;
+                    applied_hor = true;
+                }
+            },
+            _ =>  {}
+        }
+    }
+
+    if y_position == ball.y && x_position == ball.x {
+        x_position = if ball.x - last_position.x > 0.0 { x_position + GAME_SETTINGS.ball_velocity } else { x_position - GAME_SETTINGS.ball_velocity };
+        y_position = if ball.y - last_position.y >= 0.0 { y_position + GAME_SETTINGS.ball_velocity } else { y_position - GAME_SETTINGS.ball_velocity };
+    }
+
+    return Vector2 { x: x_position, y: y_position  };
+
 }
 
 fn main() {
@@ -109,6 +202,7 @@ fn main() {
         x: 0.0,
         y: 0.0,
         variant: PillVariant::PINK,
+        alive: true,
     };
 
     let mut pills: [[BreakablePill; GAME_SETTINGS.pill_column_length]; 6] = [[default_pill; GAME_SETTINGS.pill_column_length]; 6];
@@ -122,10 +216,13 @@ fn main() {
     }
 
     let mut ball_information = BallInformation {
-        state: BallState::STUCK,
-        x: 0.0,
-        y: 0.0,
+        state: BallState::Stuck,
+        position: Vector2 { x: 0.0, y: 0.0 },
+        last_position: Vector2 { x: 0.0, y: 0.0 },
     };
+
+    let bottom_line = Rectangle::new(0.0, GAME_WINDOW.height as f32 - 1.0, GAME_WINDOW.width as f32, 1.0);
+    let top_line = Rectangle::new(0.0, 1.0, GAME_WINDOW.width as f32, 1.0);
 
     while !game.window_should_close() {
         if game.is_key_down(KeyboardKey::KEY_RIGHT) {
@@ -141,15 +238,24 @@ fn main() {
                 player.x = 0.0;
             }
         }
-            match ball_information.state {
-                BallState::STUCK => {
-                    ball_information.x = player.x + (player.width / 2.0);
-                    ball_information.y = player.y - 6.0;
-                },
-                BallState::RISING => todo!("Handle ball rising in fixed direction up until collision with top of view or a pill"),
-                BallState::FALLING => todo!("Handle ball falling in fixed direction down until collision with bottom, or paddle, or pill"),
-            }
+        match ball_information.state {
+            BallState::Stuck => {
+                ball_information.position = Vector2 { x:player.x + (player.width / 2.0), y: player.y - GAME_SETTINGS.ball_radius };
 
+                if game.is_key_down(KeyboardKey::KEY_SPACE) {
+                    ball_information.state = BallState::Free;
+                }
+            },
+            BallState::Free => {
+                let last_known_position = ball_information.position;
+                ball_information.position = handle_ball_free(
+                    ball_information.position,
+                    ball_information.last_position,
+                    vec![top_line, bottom_line, player],
+                );
+                ball_information.last_position = last_known_position;
+            },
+        }
 
         let mut drawer = game.begin_drawing(&thread);
         {
@@ -170,10 +276,9 @@ fn main() {
                     }
                 }
 
-                drawer.draw_circle(
-                    ball_information.x as i32,
-                    ball_information.y as i32,
-                    6.0,
+                drawer.draw_circle_v(
+                    ball_information.position,
+                    GAME_SETTINGS.ball_radius,
                     Color::TURQUOISE
                 );
             }
