@@ -280,17 +280,41 @@ fn main() {
             },
             BallState::Free => {
                 let last_known_position = ball_information.position;
+
+                let mut colliders = vec![top_line, bottom_line, left_line, right_line];
+
+                for row in pills.iter_mut() {
+                    for pill in row.iter_mut() {
+                        if pill.alive {
+                            let pill_rect = Rectangle::new(
+                                pill.x,
+                                pill.y,
+                                GAME_SETTINGS.pill_width,
+                                GAME_SETTINGS.pill_height,
+                            );
+
+                            let side = get_collision_side(pill_rect, ball_information.position, GAME_SETTINGS.ball_radius);
+                            if let CollisionSide::None = side {
+                                // No collision
+                            } else {
+                                pill.alive = false;
+                            }
+
+                            colliders.push(pill_rect);
+                        }
+                    }
+                }
+
                 ball_information.position = handle_ball_free(
                     ball_information.position,
                     ball_information.last_position,
-                    &[top_line, left_line, right_line],
+                    &colliders,
                     player,
                 );
                 ball_information.last_position = last_known_position;
 
-                if bottom_line.check_collision_circle_rec(ball_information.position, GAME_SETTINGS.ball_radius) {
+                if ball_information.position.y + GAME_SETTINGS.ball_radius >= bottom_line.y {
                     ball_information.state = BallState::Stuck;
-
                 }
             },
         }
@@ -304,13 +328,15 @@ fn main() {
 
                 for row in pills.iter() {
                     for pill in row.iter() {
-                        drawer.draw_rectangle(
-                            pill.x as i32,
-                            pill.y as i32,
-                            GAME_SETTINGS.pill_width as i32,
-                            GAME_SETTINGS.pill_height as i32,
-                            pill.variant.to_color()
-                        );
+                        if pill.alive {
+                            drawer.draw_rectangle(
+                                pill.x as i32,
+                                pill.y as i32,
+                                GAME_SETTINGS.pill_width as i32,
+                                GAME_SETTINGS.pill_height as i32,
+                                pill.variant.to_color()
+                            );
+                        }
                     }
                 }
 
