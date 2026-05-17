@@ -144,25 +144,25 @@ fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: Vec<Rectan
         match side {
             CollisionSide::Top => {
                 if !applied_vert {
-                    y_position = y_position + GAME_SETTINGS.ball_velocity;
+                    y_position = y_position - GAME_SETTINGS.ball_velocity;
                     applied_vert = true;
                 }
             },
             CollisionSide::Bottom => {
                 if !applied_vert {
-                    y_position = y_position - GAME_SETTINGS.ball_velocity;
+                    y_position = y_position + GAME_SETTINGS.ball_velocity;
                     applied_vert = true;
                 }
             },
             CollisionSide::Left => {
                 if !applied_hor {
-                    x_position = x_position + GAME_SETTINGS.ball_velocity;
+                    x_position = x_position - GAME_SETTINGS.ball_velocity;
                     applied_hor = true;
                 }
             },
             CollisionSide::Right => {
                 if !applied_hor {
-                    x_position = x_position - GAME_SETTINGS.ball_velocity;
+                    x_position = x_position + GAME_SETTINGS.ball_velocity;
                     applied_hor = true;
                 }
             },
@@ -223,6 +223,8 @@ fn main() {
 
     let bottom_line = Rectangle::new(0.0, GAME_WINDOW.height as f32 - 1.0, GAME_WINDOW.width as f32, 1.0);
     let top_line = Rectangle::new(0.0, 1.0, GAME_WINDOW.width as f32, 1.0);
+    let left_line = Rectangle::new(0.0, 0.0, 1.0, GAME_WINDOW.height as f32);
+    let right_line = Rectangle::new(GAME_WINDOW.width as f32 - 1.0, 0.0, 1.0, GAME_WINDOW.height as f32);
 
     while !game.window_should_close() {
         if game.is_key_down(KeyboardKey::KEY_RIGHT) {
@@ -244,6 +246,10 @@ fn main() {
 
                 if game.is_key_down(KeyboardKey::KEY_SPACE) {
                     ball_information.state = BallState::Free;
+                    ball_information.last_position = Vector2 {
+                        x: ball_information.position.x,
+                        y: ball_information.position.y + GAME_SETTINGS.ball_velocity,
+                    };
                 }
             },
             BallState::Free => {
@@ -251,7 +257,7 @@ fn main() {
                 ball_information.position = handle_ball_free(
                     ball_information.position,
                     ball_information.last_position,
-                    vec![top_line, bottom_line, player],
+                    vec![top_line, bottom_line, left_line, right_line, player],
                 );
                 ball_information.last_position = last_known_position;
             },
