@@ -1,7 +1,5 @@
 use raylib::prelude::*;
 
-mod physics;
-
 struct GameWindow {
     width: i32,
     height: i32,
@@ -71,7 +69,6 @@ const GAME_SETTINGS: GameSettings = GameSettings {
     ball_velocity: 0.3,
     ball_radius: 6.0,
 };
-
 
 enum BallState {
     Stuck,
@@ -294,9 +291,7 @@ fn main() {
                             );
 
                             let side = get_collision_side(pill_rect, ball_information.position, GAME_SETTINGS.ball_radius);
-                            if let CollisionSide::None = side {
-                                // No collision
-                            } else {
+                            if !matches!(side, CollisionSide::None) {
                                 pill.alive = false;
                             }
 
