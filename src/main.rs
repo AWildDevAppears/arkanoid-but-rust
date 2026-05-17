@@ -34,6 +34,17 @@ impl PillVariant {
         }
     }
 
+    fn to_points(&self) -> i32 {
+        match self {
+            PillVariant::GREEN => 10,
+            PillVariant::PINK => 20,
+            PillVariant::BLUE => 30,
+            PillVariant::YELLOW => 40,
+            PillVariant::RED => 50,
+            PillVariant::GREY => 100,
+        }
+    }
+
 }
 
 #[derive(Clone, Copy)]
@@ -202,6 +213,28 @@ fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: &[Rectangl
 
 }
 
+
+struct GameState {
+    points: i32,
+    lives: i32,
+}
+
+impl GameState {
+    fn remove_life(&mut self) {
+        if self.lives == 0 {
+            return;
+        }
+
+        self.lives -= 1;
+    }
+
+    fn add_points(&mut self, points: i32) {
+        self.points += points;
+    }
+
+}
+
+
 fn main() {
     let (mut game, thread) = raylib::init()
         .size(GAME_WINDOW.width, GAME_WINDOW.height)
@@ -213,6 +246,11 @@ fn main() {
         GAME_WINDOW.height as f32 - (GAME_SETTINGS.player_default_height * 2.0), GAME_SETTINGS.player_default_width,
         GAME_SETTINGS.player_default_height,
     );
+
+    let mut game_state: GameState = GameState {
+        points: 0,
+        lives: 3,
+    };
 
     let camera = Camera2D {
         target: Vector2 { x: 0.0, y: 0.0 },
@@ -250,68 +288,72 @@ fn main() {
     let right_line = Rectangle::new(GAME_WINDOW.width as f32 - 1.0, 0.0, 1.0, GAME_WINDOW.height as f32);
 
     while !game.window_should_close() {
-        if game.is_key_down(KeyboardKey::KEY_RIGHT) {
-            player.x += GAME_SETTINGS.player_default_speed;
+        if game_state.lives > 0 {
+            if game.is_key_down(KeyboardKey::KEY_RIGHT) {
+                player.x += GAME_SETTINGS.player_default_speed;
 
-            if player.x + GAME_SETTINGS.player_default_width >= GAME_WINDOW.width as f32 {
-                player.x = GAME_WINDOW.width as f32 - GAME_SETTINGS.player_default_width;
-            }
-        } else if game.is_key_down(KeyboardKey::KEY_LEFT) {
-            player.x -= GAME_SETTINGS.player_default_speed;
-
-            if player.x <= 0.0 {
-                player.x = 0.0;
-            }
-        }
-        match ball_information.state {
-            BallState::Stuck => {
-                ball_information.position = Vector2 { x:player.x + (player.width / 2.0), y: player.y - GAME_SETTINGS.ball_radius };
-
-                if game.is_key_down(KeyboardKey::KEY_SPACE) {
-                    ball_information.state = BallState::Free;
-                    ball_information.last_position = Vector2 {
-                        x: ball_information.position.x,
-                        y: ball_information.position.y + GAME_SETTINGS.ball_velocity,
-                    };
+                if player.x + GAME_SETTINGS.player_default_width >= GAME_WINDOW.width as f32 {
+                    player.x = GAME_WINDOW.width as f32 - GAME_SETTINGS.player_default_width;
                 }
-            },
-            BallState::Free => {
-                let last_known_position = ball_information.position;
+            } else if game.is_key_down(KeyboardKey::KEY_LEFT) {
+                player.x -= GAME_SETTINGS.player_default_speed;
 
-                let mut colliders = vec![top_line, bottom_line, left_line, right_line];
+                if player.x <= 0.0 {
+                    player.x = 0.0;
+                }
+            }
+            match ball_information.state {
+                BallState::Stuck => {
+                    ball_information.position = Vector2 { x:player.x + (player.width / 2.0), y: player.y - GAME_SETTINGS.ball_radius };
 
-                for row in pills.iter_mut() {
-                    for pill in row.iter_mut() {
-                        if pill.alive {
-                            let pill_rect = Rectangle::new(
-                                pill.x,
-                                pill.y,
-                                GAME_SETTINGS.pill_width,
-                                GAME_SETTINGS.pill_height,
-                            );
+                    if game.is_key_down(KeyboardKey::KEY_SPACE) {
+                        ball_information.state = BallState::Free;
+                        ball_information.last_position = Vector2 {
+                            x: ball_information.position.x,
+                            y: ball_information.position.y + GAME_SETTINGS.ball_velocity,
+                        };
+                    }
+                },
+                BallState::Free => {
+                    let last_known_position = ball_information.position;
 
-                            let side = get_collision_side(pill_rect, ball_information.position, GAME_SETTINGS.ball_radius);
-                            if !matches!(side, CollisionSide::None) {
-                                pill.alive = false;
+                    let mut colliders = vec![top_line, bottom_line, left_line, right_line];
+
+                    for row in pills.iter_mut() {
+                        for pill in row.iter_mut() {
+                            if pill.alive {
+                                let pill_rect = Rectangle::new(
+                                    pill.x,
+                                    pill.y,
+                                    GAME_SETTINGS.pill_width,
+                                    GAME_SETTINGS.pill_height,
+                                );
+
+                                let side = get_collision_side(pill_rect, ball_information.position, GAME_SETTINGS.ball_radius);
+                                if !matches!(side, CollisionSide::None) {
+                                    pill.alive = false;
+                                    game_state.add_points(pill.variant.to_points());
+                                }
+
+                                colliders.push(pill_rect);
                             }
-
-                            colliders.push(pill_rect);
                         }
                     }
-                }
 
-                ball_information.position = handle_ball_free(
-                    ball_information.position,
-                    ball_information.last_position,
-                    &colliders,
-                    player,
-                );
-                ball_information.last_position = last_known_position;
+                    ball_information.position = handle_ball_free(
+                        ball_information.position,
+                        ball_information.last_position,
+                        &colliders,
+                        player,
+                    );
+                    ball_information.last_position = last_known_position;
 
-                if ball_information.position.y + GAME_SETTINGS.ball_radius >= bottom_line.y {
-                    ball_information.state = BallState::Stuck;
-                }
-            },
+                    if ball_information.position.y + GAME_SETTINGS.ball_radius >= bottom_line.y {
+                        game_state.remove_life();
+                        ball_information.state = BallState::Stuck;
+                    }
+                },
+            }
         }
 
         let mut drawer = game.begin_drawing(&thread);
@@ -340,6 +382,12 @@ fn main() {
                     GAME_SETTINGS.ball_radius,
                     Color::TURQUOISE
                 );
+
+                drawer.draw_text(format!("Pts: {} Lives: {}", game_state.points, game_state.lives).as_str(), 0, 0, 10, Color::BLACK);
+
+                if game_state.lives == 0 {
+                    drawer.draw_text("You lose!", GAME_WINDOW.width / 2, GAME_WINDOW.height / 2, 20, Color::BLACK);
+                }
             }
         }
     }
