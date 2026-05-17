@@ -68,7 +68,7 @@ const GAME_SETTINGS: GameSettings = GameSettings {
     pill_default_rows: [PillVariant::GREY, PillVariant::RED, PillVariant::YELLOW, PillVariant::BLUE, PillVariant::PINK, PillVariant::GREEN],
     pill_offset: 2.0,
     pill_column_length: 12,
-    ball_velocity: 1.0,
+    ball_velocity: 0.3,
     ball_radius: 6.0,
 };
 
@@ -131,15 +131,38 @@ fn get_collision_side(obstacle: Rectangle, ball: Vector2, radius: f32) -> Collis
     }
 }
 
-fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: Vec<Rectangle>) -> Vector2 {
-    // TODO: Ball currently gets stuck inside the paddle
+fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: &[Rectangle], paddle: Rectangle) -> Vector2 {
     let mut x_position = ball.x;
     let mut y_position = ball.y;
 
     let mut applied_vert = false;
     let mut applied_hor = false;
 
-    for collider in colliders {
+    let paddle_side = get_collision_side(paddle, ball, GAME_SETTINGS.ball_radius);
+    match paddle_side {
+        CollisionSide::Top => {
+            let hit_direction_modifier = (ball.x - (paddle.x + paddle.width / 2.0)) / (paddle.width / 2.0);
+            x_position = ball.x + (hit_direction_modifier * GAME_SETTINGS.ball_velocity);
+            y_position = ball.y - GAME_SETTINGS.ball_velocity;
+            applied_vert = true;
+            applied_hor = true;
+        },
+        CollisionSide::Bottom => {
+            y_position = y_position + GAME_SETTINGS.ball_velocity;
+            applied_vert = true;
+        },
+        CollisionSide::Left => {
+            x_position = x_position - GAME_SETTINGS.ball_velocity;
+            applied_hor = true;
+        },
+        CollisionSide::Right => {
+            x_position = x_position + GAME_SETTINGS.ball_velocity;
+            applied_hor = true;
+        },
+        _ => {}
+    }
+
+    for &collider in colliders {
         let side = get_collision_side(collider, ball, GAME_SETTINGS.ball_radius);
         match side {
             CollisionSide::Top => {
@@ -175,9 +198,7 @@ fn handle_ball_free(ball: Vector2, last_position: Vector2, colliders: Vec<Rectan
     }
 
     if !applied_hor {
-        if (ball.x - last_position.x).abs() > 0.001 {
-            x_position = if ball.x - last_position.x > 0.0 { ball.x + GAME_SETTINGS.ball_velocity } else { ball.x - GAME_SETTINGS.ball_velocity };
-        }
+        x_position = ball.x + (ball.x - last_position.x);
     }
 
     return Vector2 { x: x_position, y: y_position  };
@@ -262,9 +283,15 @@ fn main() {
                 ball_information.position = handle_ball_free(
                     ball_information.position,
                     ball_information.last_position,
-                    vec![top_line, bottom_line, left_line, right_line, player],
+                    &[top_line, left_line, right_line],
+                    player,
                 );
                 ball_information.last_position = last_known_position;
+
+                if bottom_line.check_collision_circle_rec(ball_information.position, GAME_SETTINGS.ball_radius) {
+                    ball_information.state = BallState::Stuck;
+
+                }
             },
         }
 
