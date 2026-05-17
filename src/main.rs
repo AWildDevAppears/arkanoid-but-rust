@@ -61,7 +61,7 @@ struct GameSettings {
 
 const GAME_SETTINGS: GameSettings = GameSettings {
     player_default_speed: 0.5,
-    player_default_width: 50.0,
+    player_default_width: 80.0,
     player_default_height: 10.0,
     pill_width: 50.0,
     pill_height: 10.0,
